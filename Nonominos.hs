@@ -1,3 +1,6 @@
+module Nonominos
+where
+
 import Data.List
 
 data Point = Point Int Int |
@@ -12,6 +15,7 @@ data Nonomino = Points { p0 :: Point
                        , p6 :: Point
                        , p7 :: Point
                        , p8 :: Point
+                       , color :: String
                        } deriving (Show)
 
 value (Point _ _) = 0
@@ -24,15 +28,28 @@ y (PointValue _ y _) = y
 
 
 --Imprimir una matriz
-print_ x =  putStr $ show x ++ "\t" 
-table xxs 
-    | length (nub [length xs | xs <- xxs])/=1 = error "not simetric"
-    | otherwise = mapM_ printRow xxs 
-        where printRow xs =  mapM_ print_ xs >> putStrLn "" 
+print_ sudoku nms (x,y) =  putStr $ col ++ " " ++ show ((sudoku !! x) !! y) ++ " " ++ "\x1b[49;39m"
+                            where
+                            col = color nm
+                            nm = getNonomino nms x y
+table :: [[Int]] -> [Nonomino] -> IO()
+table sudoku nms = mapM_ printRow (map (\x -> [(x,y)| y<- [0..8]]) [0..8])
+    where
+    printRow xs = mapM_ (print_ sudoku nms) xs >> putStrLn ""
+    
+    -- print_ x =  putStr $ show x ++ "\t" 
+    -- | length (nub [length xs | xs <- xxs])/=1 = error "not simetric"
+    -- | otherwise = mapM_ printRow xxs 
+            -- xxs = map (\x -> [(x,y)| y<- [0..8]]) [0..8]
+
+-- tableCell :: [[Int]] -> [Nonomino] -> Int -> Int -> String
+-- tableCell sudoku pieces x y = putStr show (sudoku !! x !! y)
+
+-- myTable sudoku pieces = [tableCell sudoku pieces x y | x <- [0..8], y <- [0..8]] >> putStr ""
 
 --Obtener todos los puntos de un Nonomino--
 getPoints :: Nonomino -> [Point]
-getPoints (Points p0 p1 p2 p3 p4 p5 p6 p7 p8) = [p0,p1,p2,p3,p4,p5,p6,p7,p8]
+getPoints (Points p0 p1 p2 p3 p4 p5 p6 p7 p8 _) = [p0,p1,p2,p3,p4,p5,p6,p7,p8]
 
 --Obtener las coordenadas de un punto--
 getCoordenate :: Point -> [Int]
@@ -65,7 +82,7 @@ traslatePoint (PointValue x y v) i j = PointValue (x+i) (y+j) v
 
 --Trasladar un nonomino--
 traslateNonomino :: Nonomino -> Int -> Int -> Nonomino
-traslateNonomino (Points p1 p2 p3 p4 p5 p6 p7 p8 p9) i j = Points mp1 mp2 mp3 mp4 mp5 mp6 mp7 mp8 mp9
+traslateNonomino (Points p1 p2 p3 p4 p5 p6 p7 p8 p9 color) i j = Points mp1 mp2 mp3 mp4 mp5 mp6 mp7 mp8 mp9 color
                                                    where
                                                    mp1 = traslatePoint p1 i j
                                                    mp2 = traslatePoint p2 i j
@@ -79,7 +96,7 @@ traslateNonomino (Points p1 p2 p3 p4 p5 p6 p7 p8 p9) i j = Points mp1 mp2 mp3 mp
 
 --Setear en una matriz un nonomino--
 setNonomino :: [[Int]] -> Nonomino -> Int -> Int -> [[Int]]
-setNonomino list nm i j = foldl curriedReplaceMatrix list points
+setNonomino list nm i j = foldl replaceMatrix list points
                     where
                     points = getPoints (traslateNonomino nm i j)
 
@@ -102,38 +119,38 @@ canSetNonomino matrix nm i j = all (\[x,y] -> valid x y && (((matrix !! x) !! y)
                                 points = getPoints (traslateNonomino nm i j)
                                 coordPoint = map getCoordenate points
 
-allNonominosSetted :: [Bool] -> Bool
-allNonominosSetted = and
+setMatrixNonomino matrix x = setNonomino matrix x i j
+                            where
+                            free = findFirstFree matrix
+                            i = fst free
+                            j = snd free
 
 setAllNonominos :: [[Int]] -> [Nonomino] -> [Nonomino]
 setAllNonominos matrix [] = []
-setAllNonominos matrix (xx:xs) = nm : setAllNonominos newMatrix xs
+setAllNonominos matrix (x:xs) = nm : setAllNonominos cMatrix xs
                                 where
+                                nm = traslateNonomino x i j
                                 free = findFirstFree matrix
-                                x = fst free
-                                y = snd free
-                                nm = traslateNonomino xx x y
-                                newMatrix = setNonomino matrix xx x y
+                                i = fst free
+                                j = snd free
+                                cMatrix = setNonomino matrix x i j
+
 getSettedMatrix :: [[Int]] -> [Nonomino] -> [[Int]]
 getSettedMatrix matrix [] = matrix
 getSettedMatrix matrix (x:xs) = getSettedMatrix cMatrix xs
                                 where
-                                    cMatrix = setNonomino matrix x i j
-                                    free = findFirstFree matrix
-                                    i = fst free
-                                    j = snd free
+                                    cMatrix = setMatrixNonomino matrix x
 
 canSetAllNonominos :: [[Int]] -> [Nonomino] -> Bool
 canSetAllNonominos matrix [] = checkSudoku matrix
 canSetAllNonominos matrix (x:xs)
-                                | canSetNonomino matrix x i j = 
-                                    let cMatrix = setNonomino matrix x i j
-                                    in canSetAllNonominos cMatrix xs
+                                | canSetNonomino matrix x i j = canSetAllNonominos cMatrix xs
                                 | otherwise = False
                                 where
                                     free = findFirstFree matrix
                                     i = fst free
                                     j = snd free
+                                    cMatrix = setNonomino matrix x i j
 
 checkRow :: [[Int]] -> Bool
 checkRow [] = True
@@ -246,54 +263,3 @@ solve matrix possibles nms i j | cell > 0 = solve matrix possibles nms i (j+1)
 myReplicator :: Int -> [[Int]]
 myReplicator n = replicate 9 (replicate 9 n)
 matrix = myReplicator (-1)
-
-
-m1 = Points (Point 0 0)         (Point 0 1) (Point 0 2)
-            (PointValue 0 3 1)  (Point 0 4) (Point 1 1)
-            (Point 1 2)         (Point 1 3) (Point 2 2)
-m2 = Points (PointValue 0 0 2)  (Point 0 1)         (PointValue 0 2 3)
-            (Point 0 3)         (Point 1 (-1))      (Point 1 0)
-            (Point 1 1)         (PointValue 1 2 9)  (Point 1 3)
-m3 = Points (PointValue 0 0 6)  (Point 1 0)         (Point 1 1)
-            (Point 1 3)         (PointValue 2 0 8)  (Point 2 1)
-            (Point 2 2)         (Point 2 3)         (PointValue 3 2 4)
-m4 = Points (Point 0 0)         (Point 0 1) (Point 0 2)
-            (PointValue 0 3 8)  (Point 0 4) (Point 1 3)
-            (Point 1 4)         (Point 2 3) (Point 2 4)
-m5 = Points (PointValue 0 0 7)      (PointValue 1 (-1) 5)   (Point 1 0)
-            (PointValue 2 (-2) 2)   (Point 2 (-1))          (PointValue 3 (-2) 9)
-            (PointValue 4 (-2) 1)   (Point 5 (-3))          (Point 5 (-2))
-m6 = Points (PointValue 0 0 4)  (Point 0 1)    (PointValue 1 0 6)
-            (Point 1 1)         (Point 2 (-1)) (Point 2 0)
-            (Point 2 1)         (Point 3 1)    (Point 4 1)
-m7 = Points (Point 0 0)         (Point 0 1)         (Point 1 0)
-            (Point 1 1)         (PointValue 2 0 3)  (Point 2 1)
-            (PointValue 3 0 4)  (Point 3 1)         (Point 4 0)
-m8 = Points (Point 0 0)     (Point 0 1)         (Point 1 0)
-            (Point 1 1)     (Point 2 0)         (Point 2 1)
-            (Point 3 (-1))  (PointValue 3 0 7)  (Point 3 1)
-m9 = Points (PointValue 0 0 8)  (Point 0 1)         (PointValue 0 2 5)
-            (PointValue 1 0 7)  (Point 1 1)         (PointValue 1 2 9)
-            (PointValue 2 0 3)  (PointValue 2 1 6)  (Point 2 2)
-
--- m66 = Points (PointValue 0 0 4)  (Point 0 1)    (PointValue 1 0 6)
---              (Point 1 1)         (Point 2 (-1)) (Point 2 0)
---              (Point 2 1)         (Point 2 2)    (Point 2 3)
--- m88 = Points (Point 0 0)  (Point 0 1)         (Point 0 2)
---              (Point 1 0)  (Point 1 1)         (Point 1 2)
---              (Point 2 0)  (PointValue 2 1 7)  (Point 2 2)
-
-m = [m1,m2,m3,m4,m5,m6,m7,m8,m9]
--- mm1 = [m1,m2,m3,m4,m5,m6,m7,m8,m9]
--- mm2 = [m1,m2,m3,m4,m5,m66,m7,m9,m88]
-
-perm = solveNonominosPosition matrix m
-nonominoPositioned = setAllNonominos matrix (head perm)
-initialMatrix = getSettedMatrix matrix (head perm)
-initialMatrixPossible = calcMatrixPossible initialMatrix nonominoPositioned
-solved = solve initialMatrix initialMatrixPossible nonominoPositioned 0 0
--- debug :: Bool
--- debug = canSetAllNonominos matrix m
-
-i=5
-j=7
